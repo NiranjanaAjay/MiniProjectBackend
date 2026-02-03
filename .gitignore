@@ -1,0 +1,12 @@
+# Python ML artifacts
+*.pkl
+*.joblib
+*.sav
+
+# Model outputs
+models/
+artifacts/
+
+# Python cache
+__pycache__/
+*.pyc
