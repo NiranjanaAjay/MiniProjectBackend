@@ -12,8 +12,7 @@ if __name__ == '__main__':
     print("\n" + "="*55)
     print("     BONE MARROW TRANSPLANT MATCHING SYSTEM")
     print("="*55)
-    print("  Note: Model trained on pediatric patients (0-20 years).")
-
+    
     while True:
         try:
             print("\n" + "─"*55)
