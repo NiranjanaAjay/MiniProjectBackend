@@ -1,0 +1,9 @@
+# Generated files — do not commit
+*.pkl
+feature_cols.json
+bone_marrow.csv
+bone_marrow_augmented.csv
+donor_db.csv
+patient_db.csv
+__pycache__/
+*.pyc
