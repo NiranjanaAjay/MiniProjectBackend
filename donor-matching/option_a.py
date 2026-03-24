@@ -12,32 +12,34 @@ donor_db   = pd.read_csv('donor_db.csv')
 patient_db = pd.read_csv('patient_db.csv')
 
 
-def select_patient_from_db():
-    print("\n" + "─"*60)
-    print("  AVAILABLE PATIENTS")
-    print("─"*60)
-    print(f"  {'ID':<6} {'Age':<6} {'Gender':<8} {'Blood':<7}"
-          f" {'Disease':<14} {'Risk':<6}")
-    print(f"  {'─'*6} {'─'*6} {'─'*8} {'─'*7} {'─'*14} {'─'*6}")
+# def select_patient_from_db():
+#     print("\n" + "─"*60)
+#     print("  AVAILABLE PATIENTS")
+#     print("─"*60)
+#     print(f"  {'ID':<6} {'Age':<6} {'Gender':<8} {'Blood':<7}"
+#           f" {'Disease':<14} {'Risk':<6}")
+#     print(f"  {'─'*6} {'─'*6} {'─'*8} {'─'*7} {'─'*14} {'─'*6}")
 
-    for _, row in patient_db.iterrows():
-        print(f"  {int(row['patient_id']):<6} "
-              f"{row['recipient_age']:<6} "
-              f"{row['recipient_gender']:<8} "
-              f"{row['recipient_ABO']:<7} "
-              f"{row['disease']:<14} "
-              f"{row['risk_group']:<6}")
+#     for _, row in patient_db.iterrows():
+#         print(f"  {int(row['patient_id']):<6} "
+#               f"{row['recipient_age']:<6} "
+#               f"{row['recipient_gender']:<8} "
+#               f"{row['recipient_ABO']:<7} "
+#               f"{row['disease']:<14} "
+#               f"{row['risk_group']:<6}")
 
-    while True:
-        try:
-            pid   = int(input("\n  Enter Patient ID: ").strip())
-            match = patient_db[patient_db['patient_id'] == pid]
-            if len(match) == 0:
-                print(f"    ⚠️  Patient ID {pid} not found.")
-                continue
-            return match.iloc[0].to_dict()
-        except ValueError:
-            print("    ⚠️  Enter a valid number.")
+#     while True:
+#         try:
+#             pid   = int(input("\n  Enter Patient ID: ").strip())
+#             match = patient_db[patient_db['patient_id'] == pid]
+#             if len(match) == 0:
+#                 print(f"    ⚠️  Patient ID {pid} not found.")
+#                 continue
+#             return match.iloc[0].to_dict()
+#         except ValueError:
+#             print("    ⚠️  Enter a valid number.")
+
+
 
 
 def score_donor_against_patient(donor_row: dict, patient_row: dict):
@@ -136,38 +138,25 @@ def print_top5_report(top5: list, patient: dict):
     print(f"\n{'='*60}\n")
 
 
-def run_option_a():
-    print("\n" + "─"*55)
-    print("  OPTION A — SELECT PATIENT → FIND TOP 5 DONORS")
-    print("─"*55)
+def run_option_a(patient: dict, donor_db: pd.DataFrame):
 
-    patient = select_patient_from_db()
-
-    print(f"\n  Scoring {len(donor_db)} donors...", end=" ", flush=True)
     results = []
+
     for _, donor_row in donor_db.iterrows():
         try:
-            result = score_donor_against_patient(donor_row.to_dict(), patient)
+            result = score_donor_against_patient(
+                donor_row.to_dict(),
+                patient
+            )
             results.append(result)
         except Exception:
             continue
 
-    # results.sort(
-    #     key=lambda x: (x['compatibility_score'], x['alive_probability']),
-    #     reverse=True
-    # )
-    # print("Done ✅")
-    # print_top5_report(results[:5], patient)
-
     results.sort(
-    key=lambda x: (x['compatibility_score'], x['alive_probability']),
-    reverse=True
+        key=lambda x: (x['compatibility_score'], x['alive_probability']),
+        reverse=True
     )
 
     top5 = results[:5]
 
-    print("Done ✅")
-    print_top5_report(top5, patient)
-
-    # ✅ ADD THIS (IMPORTANT)
-    return top5, patient
+    return top5
