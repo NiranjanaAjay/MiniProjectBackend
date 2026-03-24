@@ -12,6 +12,10 @@ import joblib, json
 import numpy as np
 import pandas as pd
 from compatibility import compute_compatibility_score
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 from option_a import run_option_a
 import requests
@@ -84,8 +88,10 @@ class PredictRequest(BaseModel):
     donor:   DonorInput
     patient: PatientInput
 
-SUPABASE_URL = "https://uhpinfogzptzsvulhpvr.supabase.co/rest/v1/Patient-Donor"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVocGluZm9nenB0enN2dWxocHZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjQyNjEsImV4cCI6MjA2OTgwMDI2MX0.PrVCuwG314G4x3YW-b3p1-xHDLjcLyLbxvh4fMt_UvE"
+SUPABASE_URL, SUPABASE_KEY = (
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY"),
+)
 
 supabase_headers = {
     "apikey": SUPABASE_KEY,
@@ -256,11 +262,12 @@ def find_top5(patient_id: int):
     patient_res = requests.get(
         "https://uhpinfogzptzsvulhpvr.supabase.co/rest/v1/Patient",
         headers=supabase_headers,
-        params={"patient_id": f"eq.{patient_id}"}
+        params={"Patient_id": f"eq.{patient_id}"}  # capital P
     )
 
     patient_data = patient_res.json()
-
+    print("Patient data:", patient_data)
+    
     if not patient_data:
         raise HTTPException(status_code=404, detail="Patient not found")
 
@@ -275,14 +282,14 @@ def find_top5(patient_id: int):
         "recipient_body_mass": float(patient["BodyMass"]),
         "recipient_ABO": patient["BloodGroup"].replace("O", "0"),
         "recipient_rh": {
-            "+": "plus",
-            "-": "minus",
-            "positive": "plus",
-            "negative": "minus"
+            "+": "plus", "-": "minus",
+            "positive": "plus", "negative": "minus",
+            "plus": "plus", "minus": "minus"          # ← add these
         }.get(patient["RhFactor"].lower(), "plus"),
+
         "recipient_CMV": {
-            "Positive": "present",
-            "Negative": "absent"
+            "Positive": "present", "Negative": "absent",
+            "Present": "present",  "Absent": "absent"  # ← add these
         }.get(patient["CMVStatus"], "absent"),
         "disease": {
             "Leukemia": "AML",
@@ -343,6 +350,7 @@ def find_top5(patient_id: int):
     # Add missing fields
     donor_df["CD34_x1e6_per_kg"] = 10.0
     donor_df["CD3_x1e8_per_kg"] = 5.0
+    donor_df["CD3_to_CD34_ratio"] = donor_df["CD3_x1e8_per_kg"] / donor_df["CD34_x1e6_per_kg"] 
 
     # Fix formats
     donor_df["donor_ABO"] = donor_df["donor_ABO"].replace({"O": "0"})
@@ -369,10 +377,20 @@ def find_top5(patient_id: int):
             "HlaMatch": d["hla_match"],
             "AboMatch": d["abo_match"],
 
+            "Antigen":d["antigen_diff"],
+            "Allele":d["allel_diff"],
+
             "Survival": d["alive_probability"],
             "RelapseRisk": d["relapse_risk"],
             "GvhdRisk": d["gvhd_risk"]
         })
+
+    # Delete existing matches for this patient before inserting new ones
+    requests.delete(
+        SUPABASE_URL,
+        headers=supabase_headers,
+        params={"Patient_id": f"eq.{patient['patient_id']}"}
+    )
 
     #  Insert into Supabase
     res = requests.post(

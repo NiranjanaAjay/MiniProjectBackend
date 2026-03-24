@@ -8,8 +8,8 @@ from compute_hla import extract_hla_profile, compute_hla_differences
 from predict_core import build_and_predict
 
 # Load databases
-donor_db   = pd.read_csv('donor_db.csv')
-patient_db = pd.read_csv('patient_db.csv')
+#donor_db   = pd.read_csv('donor_db.csv')
+#patient_db = pd.read_csv('patient_db.csv')
 
 
 # def select_patient_from_db():
@@ -93,7 +93,7 @@ def score_donor_against_patient(donor_row: dict, patient_row: dict):
         'gvhd_risk':           round(float(g_prob[1]) * 100, 1),
     }
 
-
+#PRINTING DATA TO TERMINAL
 def print_top5_report(top5: list, patient: dict):
     print("\n\n" + "="*60)
     print("           TOP 5 DONOR MATCHES")
