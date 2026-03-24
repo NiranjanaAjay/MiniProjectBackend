@@ -152,9 +152,22 @@ def run_option_a():
         except Exception:
             continue
 
+    # results.sort(
+    #     key=lambda x: (x['compatibility_score'], x['alive_probability']),
+    #     reverse=True
+    # )
+    # print("Done ✅")
+    # print_top5_report(results[:5], patient)
+
     results.sort(
-        key=lambda x: (x['compatibility_score'], x['alive_probability']),
-        reverse=True
+    key=lambda x: (x['compatibility_score'], x['alive_probability']),
+    reverse=True
     )
+
+    top5 = results[:5]
+
     print("Done ✅")
-    print_top5_report(results[:5], patient)
+    print_top5_report(top5, patient)
+
+    # ✅ ADD THIS (IMPORTANT)
+    return top5, patient
