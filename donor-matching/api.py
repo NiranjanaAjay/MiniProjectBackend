@@ -251,54 +251,140 @@ def predict(request: PredictRequest):
 
 @app.post("/find-top5/{patient_id}")
 def find_top5(patient_id: int):
-        original_input = builtins.input
 
-        try:
-            # mock input
-            builtins.input = lambda _: str(patient_id)
+    # Fetch patient
+    patient_res = requests.get(
+        "https://uhpinfogzptzsvulhpvr.supabase.co/rest/v1/Patient",
+        headers=supabase_headers,
+        params={"patient_id": f"eq.{patient_id}"}
+    )
 
-            # run your ML pipeline
-            top5, patient = run_option_a()
+    patient_data = patient_res.json()
 
-        finally:
-            # ALWAYS restore input
-            builtins.input = original_input
+    if not patient_data:
+        raise HTTPException(status_code=404, detail="Patient not found")
 
-        try:
-            insert_data = []
+    patient = patient_data[0]
 
-            for rank, d in enumerate(top5, 1):
-                insert_data.append({
-                    "Patient_id": int(patient["patient_id"]),
-                    "Patient_Name": f"Patient {patient['patient_id']}",
+    # Rename + map patient fields to match with upa table
+    patient = {
+        "patient_id": patient["Patient_id"],
 
-                    "Donor_id": d["donor_id"],
-                    "Donor_Name": f"Donor {d['donor_id']}",
+        "recipient_age": float(patient["Age"]),
+        "recipient_gender": patient["Gender"].lower(),
+        "recipient_body_mass": float(patient["BodyMass"]),
+        "recipient_ABO": patient["BloodGroup"].replace("O", "0"),
+        "recipient_rh": {
+            "+": "plus",
+            "-": "minus",
+            "positive": "plus",
+            "negative": "minus"
+        }.get(patient["RhFactor"].lower(), "plus"),
+        "recipient_CMV": {
+            "Positive": "present",
+            "Negative": "absent"
+        }.get(patient["CMVStatus"], "absent"),
+        "disease": {
+            "Leukemia": "AML",
+            "ALL": "ALL",
+            "Lymphoma": "lymphoma"
+        }.get(patient["DiseaseType"], "AML"),
+        "disease_group": patient["DiseaseGroup"],
+        "risk_group": patient["RiskGroup"],
+        "tx_post_relapse": patient["PostRelapse"],
 
-                    #"rank": rank,
-                    "CompatabilityScore": d["compatibility_score"],
-                    "HlaMatch": d["hla_match"],
-                    "AboMatch": d["abo_match"],
+        # HLA fields 
+        "HLA_A_1": patient["Hla_a_1"],
+        "HLA_A_2": patient["Hla_a_2"],
+        "HLA_B_1": patient["Hla_b_1"],
+        "HLA_B_2": patient["Hla_b_2"],
+        "HLA_C_1": patient["Hla_c_1"],
+        "HLA_C_2": patient["Hla_c_2"],
+        "HLA_DRB1_1": patient["Hla_drb1_1"],
+        "HLA_DRB1_2": patient["Hla_drb1_2"],
+        "HLA_DQB1_1": patient["Hla_dqb1_1"],
+        "HLA_DQB1_2": patient["Hla_dqb1_2"],
+    }
 
-                    "Survival": d["alive_probability"],
-                    "RelapseRisk": d["relapse_risk"],
-                    "GvhdRisk": d["gvhd_risk"]
-                })
+    # Fetch all donors
+    donor_res = requests.get(
+        "https://uhpinfogzptzsvulhpvr.supabase.co/rest/v1/Donor",
+        headers=supabase_headers
+    )
 
-            # insert into Supabase
-            res = requests.post(
-                SUPABASE_URL,
-                json=insert_data,
-                headers=supabase_headers
-            )
+    donors = donor_res.json()
 
-            if res.status_code >= 300:
-                raise Exception(res.text)
+    if not donors:
+        raise HTTPException(status_code=404, detail="No donors found")
 
-            return {
-                "message": "Inserted successfully ✅",
-                "data": insert_data
-            }
+    donor_df = pd.DataFrame(donors)
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+    # Rename columns for donor to match with table
+    donor_df = donor_df.rename(columns={
+        "Donor_id": "donor_id",
+        "Age": "donor_age",
+        "BloodGroup": "donor_ABO",
+        "CMVStatus": "donor_CMV",
+        "Gender": "donor_gender",
+        "StemCellSource": "stem_cell_source",
+
+        "Hla_a_1": "HLA_A_1",
+        "Hla_a_2": "HLA_A_2",
+        "Hla_b_1": "HLA_B_1",
+        "Hla_b_2": "HLA_B_2",
+        "Hla_c_1": "HLA_C_1",
+        "Hla_c_2": "HLA_C_2",
+        "Hla_drb1_1": "HLA_DRB1_1",
+        "Hla_drb1_2": "HLA_DRB1_2",
+        "Hla_dqb1_1": "HLA_DQB1_1",
+        "Hla_dqb1_2": "HLA_DQB1_2",
+    })
+
+    # Add missing fields
+    donor_df["CD34_x1e6_per_kg"] = 10.0
+    donor_df["CD3_x1e8_per_kg"] = 5.0
+
+    # Fix formats
+    donor_df["donor_ABO"] = donor_df["donor_ABO"].replace({"O": "0"})
+    donor_df["donor_CMV"] = donor_df["donor_CMV"].map({
+        "Positive": "present",
+        "Negative": "absent"
+    })
+
+    # Run ML
+    top5 = run_option_a(patient, donor_df)
+
+    # Prepare insert data
+    insert_data = []
+
+    for rank, d in enumerate(top5, 1):
+        insert_data.append({
+            "Patient_id": int(patient["patient_id"]),
+            "Patient_Name": f"Patient {patient['patient_id']}",
+
+            "Donor_id": d["donor_id"],
+            "Donor_Name": f"Donor {d['donor_id']}",
+
+            "CompatabilityScore": d["compatibility_score"],
+            "HlaMatch": d["hla_match"],
+            "AboMatch": d["abo_match"],
+
+            "Survival": d["alive_probability"],
+            "RelapseRisk": d["relapse_risk"],
+            "GvhdRisk": d["gvhd_risk"]
+        })
+
+    #  Insert into Supabase
+    res = requests.post(
+        SUPABASE_URL,
+        json=insert_data,
+        headers=supabase_headers
+    )
+
+    if res.status_code >= 300:
+        raise HTTPException(status_code=500, detail=res.text)
+
+    return {
+        "message": "Top 5 generated and stored ✅",
+        "data": insert_data
+    }
