@@ -13,6 +13,10 @@ import numpy as np
 import pandas as pd
 from compatibility import compute_compatibility_score
 
+from option_a import run_option_a
+import requests
+import builtins
+
 app = FastAPI(
     title="Bone Marrow Donor Matching API",
     version="1.0.0"
@@ -80,6 +84,15 @@ class PredictRequest(BaseModel):
     donor:   DonorInput
     patient: PatientInput
 
+SUPABASE_URL = "https://uhpinfogzptzsvulhpvr.supabase.co/rest/v1/Patient-Donor"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVocGluZm9nenB0enN2dWxocHZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjQyNjEsImV4cCI6MjA2OTgwMDI2MX0.PrVCuwG314G4x3YW-b3p1-xHDLjcLyLbxvh4fMt_UvE"
+
+supabase_headers = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+}
 
 # ============================================================
 # HELPER: BUILD FEATURE VECTOR
@@ -232,6 +245,60 @@ def predict(request: PredictRequest):
                 "ratio":   f"CD3/CD34 ratio auto-calculated as {ratio}"
             }
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/find-top5/{patient_id}")
+def find_top5(patient_id: int):
+        original_input = builtins.input
+
+        try:
+            # mock input
+            builtins.input = lambda _: str(patient_id)
+
+            # run your ML pipeline
+            top5, patient = run_option_a()
+
+        finally:
+            # ALWAYS restore input
+            builtins.input = original_input
+
+        try:
+            insert_data = []
+
+            for rank, d in enumerate(top5, 1):
+                insert_data.append({
+                    "Patient_id": int(patient["patient_id"]),
+                    "Patient_Name": f"Patient {patient['patient_id']}",
+
+                    "Donor_id": d["donor_id"],
+                    "Donor_Name": f"Donor {d['donor_id']}",
+
+                    #"rank": rank,
+                    "CompatabilityScore": d["compatibility_score"],
+                    "HlaMatch": d["hla_match"],
+                    "AboMatch": d["abo_match"],
+
+                    "Survival": d["alive_probability"],
+                    "RelapseRisk": d["relapse_risk"],
+                    "GvhdRisk": d["gvhd_risk"]
+                })
+
+            # insert into Supabase
+            res = requests.post(
+                SUPABASE_URL,
+                json=insert_data,
+                headers=supabase_headers
+            )
+
+            if res.status_code >= 300:
+                raise Exception(res.text)
+
+            return {
+                "message": "Inserted successfully ✅",
+                "data": insert_data
+            }
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
