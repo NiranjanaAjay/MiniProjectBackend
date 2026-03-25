@@ -1,6 +1,4 @@
-encoder.pkl
-model.pkl
-symptoms.pkl
+*.pkl
 __pycache__/
 *.pyc
 *.pyo
