@@ -94,7 +94,7 @@ def score_donor_against_patient(donor_row: dict, patient_row: dict):
     }
 
 
-def print_top5_report(top5: list, patient: dict):
+# def print_top5_report(top5: list, patient: dict):
     print("\n\n" + "="*60)
     print("           TOP 5 DONOR MATCHES")
     print("="*60)

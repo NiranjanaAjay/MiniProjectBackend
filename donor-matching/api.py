@@ -16,6 +16,7 @@ from compatibility import compute_compatibility_score
 from option_a import run_option_a
 import requests
 import builtins
+import pickle
 
 app = FastAPI(
     title="Bone Marrow Donor Matching API",
@@ -42,6 +43,16 @@ CATEGORICALS = [
     'recipient_CMV', 'disease', 'disease_group', 'risk_group',
     'stem_cell_source', 'tx_post_relapse'
 ]
+
+#models for disease prediction
+DISEASE_MODEL_PATH = "model.pkl"
+DISEASE_ENCODER_PATH = "encoder.pkl"
+SYMPTOMS_PATH = "symptoms.pkl"
+
+disease_model = pickle.load(open(DISEASE_MODEL_PATH, "rb"))
+disease_encoder = pickle.load(open(DISEASE_ENCODER_PATH, "rb"))
+SYMPTOM_NAMES = pickle.load(open(SYMPTOMS_PATH, "rb"))
+
 
 # Dataset medians for post-transplant fields
 ANC_MEDIAN = 16.0
@@ -93,6 +104,10 @@ supabase_headers = {
     "Content-Type": "application/json",
     "Prefer": "return=minimal"
 }
+
+#disease prediction
+class DiseaseRequest(BaseModel):
+    symptoms: list[str]
 
 # ============================================================
 # HELPER: BUILD FEATURE VECTOR
@@ -388,3 +403,43 @@ def find_top5(patient_id: int):
         "message": "Top 5 generated and stored ✅",
         "data": insert_data
     }
+
+@app.get("/symptoms")
+def get_symptoms():
+    return {"symptoms": sorted(SYMPTOM_NAMES)}
+
+@app.post("/predict-disease")
+def predict_disease(request: DiseaseRequest):
+    try:
+        symptoms_list = request.symptoms
+
+        input_vec = np.zeros(len(SYMPTOM_NAMES), dtype=np.float32)
+        unrecognised = []
+
+        for sym in symptoms_list:
+            sym_lower = sym.strip().lower()
+            matched = [i for i, s in enumerate(SYMPTOM_NAMES) if s.lower() == sym_lower]
+
+            if matched:
+                input_vec[matched[0]] = 1
+            else:
+                unrecognised.append(sym)
+
+        probabilities = disease_model.predict_proba([input_vec])[0]
+        top_indices = np.argsort(probabilities)[::-1][:5]
+
+        results = []
+        for idx in top_indices:
+            results.append({
+                "disease": disease_encoder.inverse_transform([idx])[0],
+                "confidence": round(float(probabilities[idx]) * 100, 2)
+            })
+
+        return {
+            "predictions": results,
+            "unrecognised_symptoms": unrecognised,
+            "low_confidence": bool(probabilities[top_indices[0]] < 0.30)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
