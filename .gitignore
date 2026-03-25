@@ -1,0 +1,9 @@
+encoder.pkl
+model.pkl
+symptoms.pkl
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
